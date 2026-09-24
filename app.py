@@ -31,10 +31,11 @@ with st.sidebar:
         help="Used to save and load your assessment history.",
     )
     if not memory.is_connected():
-        st.warning(
-            "Progress won't be saved: Supabase isn't configured yet. "
-            "Add SUPABASE_URL and SUPABASE_KEY in Settings > Secrets."
-        )
+        st.warning("Progress won't be saved - Supabase connection issue.")
+        with st.expander("Show details"):
+            st.write("SUPABASE_URL set:", bool(memory.SUPABASE_URL))
+            st.write("SUPABASE_KEY set:", bool(memory.SUPABASE_KEY))
+            st.write("Error:", memory.connection_error())
 
     mode = st.radio(
         "Mode",
