@@ -17,6 +17,7 @@ import agent
 import assessment
 import memory
 import ocr
+import past_papers
 from curriculum import get_subjects, get_topics, get_compulsory_subjects
 
 st.set_page_config(page_title="CSS Study Tutor Agent", page_icon="🎓", layout="centered")
@@ -134,18 +135,43 @@ elif mode == "✍️ Answer Practice":
 # ---------------------------------------------------------------------------
 elif mode == "🎯 AI Practice Question":
     st.header("🎯 AI Practice Question")
-    st.caption("Let the tutor set a question so you systematically cover every syllabus topic.")
+    st.caption("Practice with a real past-paper question, or let the tutor set a new one, to systematically cover every syllabus topic.")
     topics = get_topics(subject)
     covered = memory.get_covered_topics(st.session_state.student_id, subject) if st.session_state.student_id else set()
     topic = st.selectbox("Topic", topics, format_func=lambda t: f"✅ {t}" if t in covered else f"◻️ {t}")
 
-    if st.button("🎲 Generate a question"):
-        with st.spinner("Setting a question..."):
-            q = agent.generate_question(subject, topic)
-        st.session_state["ai_question"] = {"subject": subject, "topic": topic, "question": q}
+    source = st.radio(
+        "Question source",
+        ["📜 Real past paper (if available)", "🎲 New AI-generated question"],
+        horizontal=True,
+    )
+
+    if st.button("Get a question"):
+        if source.startswith("📜"):
+            pp = past_papers.get_random_question(subject, topic)
+            if pp:
+                st.session_state["ai_question"] = {
+                    "subject": subject, "topic": topic,
+                    "question": pp["question"],
+                    "source": f"FPSC {pp['year']} past paper",
+                }
+            else:
+                st.info(f"No past-paper questions saved yet for {subject} - generating one instead.")
+                with st.spinner("Setting a question..."):
+                    q = agent.generate_question(subject, topic)
+                st.session_state["ai_question"] = {
+                    "subject": subject, "topic": topic, "question": q, "source": "AI-generated",
+                }
+        else:
+            with st.spinner("Setting a question..."):
+                q = agent.generate_question(subject, topic)
+            st.session_state["ai_question"] = {
+                "subject": subject, "topic": topic, "question": q, "source": "AI-generated",
+            }
 
     if "ai_question" in st.session_state:
         aq = st.session_state["ai_question"]
+        st.caption(f"Source: {aq.get('source', 'AI-generated')}")
         st.markdown(f"**Question:** {aq['question']}")
         answer = st.text_area("Your answer", height=250, key="ai_q_answer")
         if st.button("Assess my answer", key="assess_ai_q") and answer.strip():
