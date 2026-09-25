@@ -18,7 +18,7 @@ import assessment
 import memory
 import ocr
 import past_papers
-from curriculum import get_subjects, get_topics, get_compulsory_subjects
+from curriculum import get_subjects, get_topics, get_subtopics, get_compulsory_subjects
 
 st.set_page_config(page_title="CSS Study Tutor Agent", page_icon="🎓", layout="centered")
 
@@ -100,9 +100,14 @@ def save_button(key: str):
 if mode == "📖 Study":
     st.header("📖 Study")
     topic = st.selectbox("Topic", get_topics(subject))
+    subtopics = get_subtopics(subject, topic)
+    subtopic = None
+    if subtopics:
+        subtopic_choice = st.selectbox("Sub-topic (optional)", ["Overview (all sub-topics)"] + subtopics)
+        subtopic = None if subtopic_choice == "Overview (all sub-topics)" else subtopic_choice
     if st.button("Explain this topic"):
         with st.spinner("Thinking..."):
-            result = agent.study_topic(subject, topic)
+            result = agent.study_topic(subject, topic, subtopic)
         st.markdown(result)
 
 # ---------------------------------------------------------------------------
@@ -139,6 +144,11 @@ elif mode == "🎯 AI Practice Question":
     topics = get_topics(subject)
     covered = memory.get_covered_topics(st.session_state.student_id, subject) if st.session_state.student_id else set()
     topic = st.selectbox("Topic", topics, format_func=lambda t: f"✅ {t}" if t in covered else f"◻️ {t}")
+    subtopics = get_subtopics(subject, topic)
+    subtopic = None
+    if subtopics:
+        subtopic_choice = st.selectbox("Sub-topic (optional)", ["Any sub-topic"] + subtopics, key="ai_subtopic")
+        subtopic = None if subtopic_choice == "Any sub-topic" else subtopic_choice
 
     source = st.radio(
         "Question source",
@@ -158,13 +168,13 @@ elif mode == "🎯 AI Practice Question":
             else:
                 st.info(f"No past-paper questions saved yet for {subject} - generating one instead.")
                 with st.spinner("Setting a question..."):
-                    q = agent.generate_question(subject, topic)
+                    q = agent.generate_question(subject, topic, subtopic)
                 st.session_state["ai_question"] = {
                     "subject": subject, "topic": topic, "question": q, "source": "AI-generated",
                 }
         else:
             with st.spinner("Setting a question..."):
-                q = agent.generate_question(subject, topic)
+                q = agent.generate_question(subject, topic, subtopic)
             st.session_state["ai_question"] = {
                 "subject": subject, "topic": topic, "question": q, "source": "AI-generated",
             }

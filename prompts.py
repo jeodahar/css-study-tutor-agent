@@ -8,7 +8,7 @@ Explain the topic below to a CSS candidate in a clear, exam-focused way.
 Include key concepts, important points examiners look for, and 2-3 likely exam angles.
 
 Subject: {subject}
-Topic: {topic}
+Topic: {topic}{subtopic_line}
 """
 
 QUESTION_ANALYSIS_PROMPT = """You are a CSS exam question analyst.
@@ -41,7 +41,7 @@ style as real FPSC papers (using command words like "Discuss", "Critically
 examine", "Analyze", "Compare and contrast", etc. as appropriate).
 
 Subject: {subject}
-Topic: {topic}
+Topic: {topic}{subtopic_line}
 
 Output ONLY the question text - no numbering, no preamble, no explanation.
 """

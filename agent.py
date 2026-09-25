@@ -41,8 +41,9 @@ def _ask(prompt: str, temperature: float = 0.4, max_tokens: int = 1500) -> str:
     return response.choices[0].message.content.strip()
 
 
-def study_topic(subject: str, topic: str) -> str:
-    prompt = STUDY_PROMPT.format(subject=subject, topic=topic)
+def study_topic(subject: str, topic: str, subtopic: str = None) -> str:
+    subtopic_line = f"\nFocus specifically on this sub-topic: {subtopic}" if subtopic else ""
+    prompt = STUDY_PROMPT.format(subject=subject, topic=topic, subtopic_line=subtopic_line)
     return _ask(prompt)
 
 
@@ -57,8 +58,9 @@ def make_study_plan(subject: str, days: int, weak_areas) -> str:
     return _ask(prompt)
 
 
-def generate_question(subject: str, topic: str) -> str:
-    prompt = QUESTION_GENERATION_PROMPT.format(subject=subject, topic=topic)
+def generate_question(subject: str, topic: str, subtopic: str = None) -> str:
+    subtopic_line = f"\nFocus specifically on this sub-topic: {subtopic}" if subtopic else ""
+    prompt = QUESTION_GENERATION_PROMPT.format(subject=subject, topic=topic, subtopic_line=subtopic_line)
     return _ask(prompt, temperature=0.7, max_tokens=200)
 
 
