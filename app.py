@@ -2,11 +2,13 @@
 app.py
 CSS Study Tutor Agent - Streamlit front end.
 
-Modes: Study, Question Analysis, Handwritten Answer (OCR + assessment),
-Answer Practice (typed), Study Plan, Progress.
+Modes: Study, Question Analysis, Answer Practice (typed), AI Practice Question
+(agent sets the question), Handwritten Answer (OCR + assessment),
+Study Plan, Dashboard.
 
 Assessment reports are saved to Supabase (see memory.py) so a student's
-history and weak-topic tracking survive closing the app / redeploys.
+history, topic coverage, and weak-topic tracking survive closing the app
+or a redeploy.
 """
 
 import streamlit as st
@@ -15,7 +17,7 @@ import agent
 import assessment
 import memory
 import ocr
-from curriculum import get_subjects, get_topics
+from curriculum import get_subjects, get_topics, get_compulsory_subjects
 
 st.set_page_config(page_title="CSS Study Tutor Agent", page_icon="🎓", layout="centered")
 
@@ -43,13 +45,55 @@ with st.sidebar:
             "📖 Study",
             "🔍 Question Analysis",
             "✍️ Answer Practice",
+            "🎯 AI Practice Question",
             "📷 Handwritten Answer",
             "📅 Study Plan",
-            "📊 Progress",
+            "📊 Dashboard",
         ],
     )
 
-subject = st.selectbox("Subject", get_subjects())
+if mode != "📊 Dashboard":
+    subject = st.selectbox("Subject", get_subjects())
+
+
+def render_assessment(result: dict):
+    """Shared display for an assessment result dict."""
+    st.subheader("📊 Assessment")
+    ratings = result.get("ratings", {})
+    for k, v in ratings.items():
+        st.write(f"**{k.title()}**: {v}")
+    if result.get("strengths"):
+        st.markdown("**✅ Strengths**")
+        for s in result["strengths"]:
+            st.write(f"- {s}")
+    if result.get("areas_to_improve"):
+        st.markdown("**⚠️ Areas to improve**")
+        for w in result["areas_to_improve"]:
+            st.write(f"- {w}")
+    if result.get("next_practice"):
+        st.markdown(f"**🎯 Next practice:** {result['next_practice']}")
+    if result.get("raw_response"):
+        st.caption("Raw model response (couldn't parse as structured JSON):")
+        st.text(result["raw_response"])
+    st.caption("This is an AI practice assessment, not an official CSS examiner score.")
+
+
+def save_button(key: str):
+    """Shared 'save this assessment' button, using whatever is in st.session_state['last_assessment']."""
+    if not st.session_state.student_id:
+        st.info("Enter your name / student ID in the sidebar to save this.")
+        return
+    if st.button("💾 Save this assessment", key=key):
+        a = st.session_state["last_assessment"]
+        ok = memory.save_assessment(
+            st.session_state.student_id, a["subject"], a["question"],
+            a["answer"], a["result"], topic=a.get("topic"),
+        )
+        if ok:
+            st.success("Saved to your history.")
+        else:
+            st.error(memory.connection_error() or "Could not save - check Supabase setup.")
+
 
 # ---------------------------------------------------------------------------
 if mode == "📖 Study":
@@ -72,41 +116,54 @@ elif mode == "🔍 Question Analysis":
 # ---------------------------------------------------------------------------
 elif mode == "✍️ Answer Practice":
     st.header("✍️ Answer Practice")
+    topic = st.selectbox("Topic (optional, for tracking)", ["General"] + get_topics(subject))
     question = st.text_area("Question")
     answer = st.text_area("Your answer", height=250)
     if st.button("Assess my answer") and question.strip() and answer.strip():
         with st.spinner("Assessing..."):
             result = assessment.assess_answer(subject, question, answer)
-        st.session_state["last_assessment"] = (subject, question, answer, result)
+        st.session_state["last_assessment"] = {
+            "subject": subject, "question": question, "answer": answer,
+            "result": result, "topic": None if topic == "General" else topic,
+        }
 
     if "last_assessment" in st.session_state:
-        subj, q, a, result = st.session_state["last_assessment"]
-        st.subheader("📊 Assessment")
-        ratings = result.get("ratings", {})
-        for k, v in ratings.items():
-            st.write(f"**{k.title()}**: {v}")
-        st.markdown("**✅ Strengths**")
-        for s in result.get("strengths", []):
-            st.write(f"- {s}")
-        st.markdown("**⚠️ Areas to improve**")
-        for w in result.get("areas_to_improve", []):
-            st.write(f"- {w}")
-        if result.get("next_practice"):
-            st.markdown(f"**🎯 Next practice:** {result['next_practice']}")
-        if result.get("raw_response"):
-            st.caption("Raw model response (couldn't parse as structured JSON):")
-            st.text(result["raw_response"])
+        render_assessment(st.session_state["last_assessment"]["result"])
+        save_button("save_typed")
 
-        if st.session_state.student_id and st.button("💾 Save this assessment"):
-            ok = memory.save_assessment(st.session_state.student_id, subj, q, a, result)
-            if ok:
-                st.success("Saved to your history.")
-            else:
-                st.error(memory.connection_error() or "Could not save - check Supabase setup.")
+# ---------------------------------------------------------------------------
+elif mode == "🎯 AI Practice Question":
+    st.header("🎯 AI Practice Question")
+    st.caption("Let the tutor set a question so you systematically cover every syllabus topic.")
+    topics = get_topics(subject)
+    covered = memory.get_covered_topics(st.session_state.student_id, subject) if st.session_state.student_id else set()
+    topic = st.selectbox("Topic", topics, format_func=lambda t: f"✅ {t}" if t in covered else f"◻️ {t}")
+
+    if st.button("🎲 Generate a question"):
+        with st.spinner("Setting a question..."):
+            q = agent.generate_question(subject, topic)
+        st.session_state["ai_question"] = {"subject": subject, "topic": topic, "question": q}
+
+    if "ai_question" in st.session_state:
+        aq = st.session_state["ai_question"]
+        st.markdown(f"**Question:** {aq['question']}")
+        answer = st.text_area("Your answer", height=250, key="ai_q_answer")
+        if st.button("Assess my answer", key="assess_ai_q") and answer.strip():
+            with st.spinner("Assessing..."):
+                result = assessment.assess_answer(aq["subject"], aq["question"], answer)
+            st.session_state["last_assessment"] = {
+                "subject": aq["subject"], "question": aq["question"], "answer": answer,
+                "result": result, "topic": aq["topic"],
+            }
+
+    if "last_assessment" in st.session_state:
+        render_assessment(st.session_state["last_assessment"]["result"])
+        save_button("save_ai_question")
 
 # ---------------------------------------------------------------------------
 elif mode == "📷 Handwritten Answer":
     st.header("📷 Handwritten Answer")
+    topic = st.selectbox("Topic (optional, for tracking)", ["General"] + get_topics(subject))
     question = st.text_area("Question")
     uploaded = st.file_uploader("Upload a photo of your handwritten answer", type=["jpg", "jpeg", "png"])
 
@@ -123,29 +180,14 @@ elif mode == "📷 Handwritten Answer":
         if st.button("Analyze my answer") and question.strip() and edited.strip():
             with st.spinner("Assessing..."):
                 result = assessment.assess_answer(subject, question, edited)
-            st.session_state["last_assessment"] = (subject, question, edited, result)
+            st.session_state["last_assessment"] = {
+                "subject": subject, "question": question, "answer": edited,
+                "result": result, "topic": None if topic == "General" else topic,
+            }
 
     if "last_assessment" in st.session_state:
-        subj, q, a, result = st.session_state["last_assessment"]
-        st.subheader("📊 Assessment")
-        ratings = result.get("ratings", {})
-        for k, v in ratings.items():
-            st.write(f"**{k.title()}**: {v}")
-        st.markdown("**✅ Strengths**")
-        for s in result.get("strengths", []):
-            st.write(f"- {s}")
-        st.markdown("**⚠️ Areas to improve**")
-        for w in result.get("areas_to_improve", []):
-            st.write(f"- {w}")
-        if result.get("next_practice"):
-            st.markdown(f"**🎯 Next practice:** {result['next_practice']}")
-
-        if st.session_state.student_id and st.button("💾 Save this assessment", key="save_handwritten"):
-            ok = memory.save_assessment(st.session_state.student_id, subj, q, a, result)
-            if ok:
-                st.success("Saved to your history.")
-            else:
-                st.error(memory.connection_error() or "Could not save - check Supabase setup.")
+        render_assessment(st.session_state["last_assessment"]["result"])
+        save_button("save_handwritten")
 
 # ---------------------------------------------------------------------------
 elif mode == "📅 Study Plan":
@@ -160,26 +202,46 @@ elif mode == "📅 Study Plan":
         st.markdown(result)
 
 # ---------------------------------------------------------------------------
-elif mode == "📊 Progress":
-    st.header("📊 Progress")
+elif mode == "📊 Dashboard":
+    st.header("📊 Dashboard")
     if not st.session_state.student_id:
-        st.info("Enter your name / student ID in the sidebar to see your progress.")
+        st.info("Enter your name / student ID in the sidebar to see your dashboard.")
     else:
-        history = memory.get_history(st.session_state.student_id, subject, limit=50)
-        st.write(f"**Recent answers analyzed:** {len(history)}")
+        all_history = memory.get_all_history(st.session_state.student_id)
+        subjects_touched = {h.get("subject") for h in all_history if h.get("subject")}
 
-        weak = memory.get_weak_topics(st.session_state.student_id, subject)
-        if weak:
-            st.subheader("⚠️ Repeated weak areas")
-            for w, count in weak:
-                st.write(f"- {w} (seen {count}x)")
+        col1, col2 = st.columns(2)
+        col1.metric("Total answers assessed", len(all_history))
+        col2.metric("Subjects started", f"{len(subjects_touched)}/{len(get_subjects())}")
+
+        st.subheader("📚 Coverage by subject")
+        for subj in get_compulsory_subjects():
+            topics = get_topics(subj)
+            covered = memory.get_covered_topics(st.session_state.student_id, subj)
+            covered_count = len([t for t in topics if t in covered])
+            st.write(f"**{subj}** - {covered_count}/{len(topics)} topics practiced")
+            st.progress(covered_count / len(topics) if topics else 0)
+
+        st.subheader("⚠️ Repeated weak areas (all subjects)")
+        weak_by_subject = {}
+        for subj in subjects_touched:
+            weak = memory.get_weak_topics(st.session_state.student_id, subj)
+            if weak:
+                weak_by_subject[subj] = weak
+        if weak_by_subject:
+            for subj, weak in weak_by_subject.items():
+                st.write(f"**{subj}**")
+                for w, count in weak[:5]:
+                    st.write(f"- {w} (seen {count}x)")
         else:
-            st.info("No weak areas tracked yet - complete some Answer Practice or Handwritten Answer assessments.")
+            st.info("No weak areas tracked yet - complete some assessments first.")
 
-        if history:
-            st.subheader("🗂️ History")
-            for item in history:
-                with st.expander(f"{item.get('created_at', '')[:16]} - {item.get('question', '')[:60]}"):
-                    st.write("**Question:**", item.get("question"))
-                    st.write("**Your answer:**", item.get("answer_text"))
-                    st.write("**Assessment:**", item.get("assessment"))
+        st.subheader("🗂️ Recent history")
+        for item in all_history[:30]:
+            label = f"{item.get('created_at', '')[:16]} · {item.get('subject', '')} - {item.get('question', '')[:50]}"
+            with st.expander(label):
+                if item.get("topic"):
+                    st.write("**Topic:**", item.get("topic"))
+                st.write("**Question:**", item.get("question"))
+                st.write("**Your answer:**", item.get("answer_text"))
+                st.write("**Assessment:**", item.get("assessment"))

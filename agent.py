@@ -10,7 +10,12 @@ version - Groq handles single-task calls like these fine on its own.)
 from groq import Groq
 
 from config import GROQ_API_KEY, GROQ_MODEL
-from prompts import STUDY_PROMPT, QUESTION_ANALYSIS_PROMPT, STUDY_PLAN_PROMPT
+from prompts import (
+    STUDY_PROMPT,
+    QUESTION_ANALYSIS_PROMPT,
+    STUDY_PLAN_PROMPT,
+    QUESTION_GENERATION_PROMPT,
+)
 from tools import web_search, format_search_results
 
 
@@ -50,6 +55,11 @@ def make_study_plan(subject: str, days: int, weak_areas) -> str:
     weak_str = ", ".join(weak_areas) if weak_areas else "None recorded yet"
     prompt = STUDY_PLAN_PROMPT.format(subject=subject, days=days, weak_areas=weak_str)
     return _ask(prompt)
+
+
+def generate_question(subject: str, topic: str) -> str:
+    prompt = QUESTION_GENERATION_PROMPT.format(subject=subject, topic=topic)
+    return _ask(prompt, temperature=0.7, max_tokens=200)
 
 
 def current_affairs_briefing(query: str) -> str:

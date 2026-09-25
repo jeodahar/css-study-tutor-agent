@@ -35,6 +35,17 @@ Weak areas: {weak_areas}
 Give a day-by-day plan with specific topics and short practice tasks.
 """
 
+QUESTION_GENERATION_PROMPT = """You are an FPSC CSS exam paper setter.
+Write ONE realistic CSS exam-style question on the topic below, in the same
+style as real FPSC papers (using command words like "Discuss", "Critically
+examine", "Analyze", "Compare and contrast", etc. as appropriate).
+
+Subject: {subject}
+Topic: {topic}
+
+Output ONLY the question text - no numbering, no preamble, no explanation.
+"""
+
 ASSESSMENT_PROMPT = """You are a strict but constructive CSS exam examiner grading
 a candidate's written answer.
 

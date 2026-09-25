@@ -41,7 +41,7 @@ def connection_error():
     return _client_error
 
 
-def save_assessment(student_id, subject, question, answer_text, assessment_result):
+def save_assessment(student_id, subject, question, answer_text, assessment_result, topic=None):
     """Save one assessment record. Returns True on success, False otherwise."""
     client = get_client()
     if client is None:
@@ -49,6 +49,7 @@ def save_assessment(student_id, subject, question, answer_text, assessment_resul
     data = {
         "student_id": student_id,
         "subject": subject,
+        "topic": topic,
         "question": question,
         "answer_text": answer_text,
         "assessment": assessment_result,
@@ -84,6 +85,17 @@ def get_history(student_id, subject=None, limit=20):
         global _client_error
         _client_error = str(e)
         return []
+
+
+def get_covered_topics(student_id, subject):
+    """Set of topic names the student has already practiced for this subject."""
+    history = get_history(student_id, subject, limit=200)
+    return {item.get("topic") for item in history if item.get("topic")}
+
+
+def get_all_history(student_id, limit=200):
+    """All of a student's assessments across every subject (for the dashboard overview)."""
+    return get_history(student_id, subject=None, limit=limit)
 
 
 def get_weak_topics(student_id, subject=None):

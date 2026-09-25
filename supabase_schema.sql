@@ -4,6 +4,7 @@ create table if not exists assessments (
     id uuid default gen_random_uuid() primary key,
     student_id text not null,
     subject text not null,
+    topic text,
     question text,
     answer_text text,
     assessment jsonb,
@@ -11,3 +12,7 @@ create table if not exists assessments (
 );
 
 create index if not exists idx_assessments_student on assessments (student_id);
+
+-- If you already created this table before the "topic" column was added,
+-- run this line too (safe to run even if the column already exists):
+alter table assessments add column if not exists topic text;
